@@ -26,26 +26,50 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        // 1. VALIDACIÓN (El filtro de seguridad)
-        // Si no cumple esto, Laravel devuelve error 422 automáticamente
+        // 1. VALIDACIÓN
         $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
             'stock' => 'integer|min:0',
-            'description' => 'nullable|string'
+            'description' => 'nullable|string',
+            // Nueva validación: Debe ser imagen (jpg, png, etc) y pesar máximo 2MB
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
-        // 2. CREACIÓN
-        // INSERT INTO products (...) VALUES (...)
-        $producto = Product::create($request->all());
+        // 2. CAPTURA DE DATOS
+        $data = $request->all();
 
-        // 3. RESPUESTA
-        // Retornamos el objeto creado con código 201 (Created)
+        // --- ZONA DE DEBUG ---
+        // Si esto imprime "No hay archivo", el problema es Postman/Thunder.
+        if (!$request->hasFile('image')) {
+            return response()->json([
+                'error' => 'Laravel dice: No recibí ningún archivo llamado image.',
+                'debug_headers' => $request->headers->all(),
+                'debug_all' => $request->all()
+            ], 400);
+        }
+        // ---------------------
+
+        // 3. PROCESAMIENTO DE IMAGEN
+        if ($request->hasFile('image')) {
+            // Guardar en: storage/app/public/products
+            // Devuelve la ruta relativa (ej: "products/foto1.jpg")
+            $path = $request->file('image')->store('products', 'public');
+            
+            // Guardamos esa ruta en el campo 'image_url' de la base de datos
+            $request->merge(['image_url' => $path]);
+            $product = Product::create($request->all());
+        }
+
+        // 4. CREACIÓN
+        $product = Product::create($data);
+
         return response()->json([
-            'message' => 'Producto creado con éxito',
-            'data' => $producto
+            'message' => 'Producto creado con imagen',
+            'data' => $product
         ], 201);
     }
+
 
      /**
      * Muestra un producto específico.
