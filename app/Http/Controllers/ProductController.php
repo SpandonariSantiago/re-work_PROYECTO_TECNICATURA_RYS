@@ -32,40 +32,25 @@ class ProductController extends Controller
             'price' => 'required|numeric|min:0',
             'stock' => 'integer|min:0',
             'description' => 'nullable|string',
-            // Nueva validación: Debe ser imagen (jpg, png, etc) y pesar máximo 2MB
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
-        // 2. CAPTURA DE DATOS
+        // 2. PREPARAR EL PAQUETE DE DATOS
         $data = $request->all();
 
-        // --- ZONA DE DEBUG ---
-        // Si esto imprime "No hay archivo", el problema es Postman/Thunder.
-        if (!$request->hasFile('image')) {
-            return response()->json([
-                'error' => 'Laravel dice: No recibí ningún archivo llamado image.',
-                'debug_headers' => $request->headers->all(),
-                'debug_all' => $request->all()
-            ], 400);
-        }
-        // ---------------------
-
-        // 3. PROCESAMIENTO DE IMAGEN
+        // 3. PROCESAMIENTO DE IMAGEN (Solo modificamos el array $data)
         if ($request->hasFile('image')) {
-            // Guardar en: storage/app/public/products
-            // Devuelve la ruta relativa (ej: "products/foto1.jpg")
             $path = $request->file('image')->store('products', 'public');
-            
-            // Guardamos esa ruta en el campo 'image_url' de la base de datos
-            $request->merge(['image_url' => $path]);
-            $product = Product::create($request->all());
+            // Agregamos la ruta al array de datos que vamos a guardar
+            $data['image_url'] = $path;
         }
 
-        // 4. CREACIÓN
+        // 4. CREACIÓN (UNA SOLA VEZ)
+        // Usamos $data porque ya contiene la image_url si correspondía
         $product = Product::create($data);
 
         return response()->json([
-            'message' => 'Producto creado con imagen',
+            'message' => 'Producto creado con éxito',
             'data' => $product
         ], 201);
     }
@@ -90,23 +75,32 @@ class ProductController extends Controller
      */
     public function update(Request $request, $id)
     {
-        // 1. Buscamos el producto (o fallamos con 404)
         $product = Product::findOrFail($id);
 
-        // 2. Validamos los datos entrantes
-        // Nota: A veces no envían todos los campos, así que 'sometimes' es útil,
-        // pero por ahora usaremos la misma validación estricta para simplificar.
+        // 1. Validamos (Nota: 'image' es nullable porque quizás no quieren cambiarla)
         $request->validate([
             'name' => 'string|max:255',
             'price' => 'numeric|min:0',
             'stock' => 'integer|min:0',
-            'description' => 'nullable|string'
+            'description' => 'nullable|string',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
-        // 3. Actualizamos masivamente (gracias al $fillable que pusimos ayer)
-        $product->update($request->all());
+        // 2. Capturamos los datos
+        $data = $request->all();
 
-        // 4. Retornamos el producto actualizado
+        // 3. Lógica de Imagen (Igual que en store, pero para update)
+        if ($request->hasFile('image')) {
+            // Opcional: Aquí podríamos borrar la imagen vieja del disco para no acumular basura
+            // Storage::disk('public')->delete($product->image_url);
+
+            $path = $request->file('image')->store('products', 'public');
+            $data['image_url'] = $path;
+        }
+
+        // 4. Actualizamos
+        $product->update($data);
+
         return response()->json([
             'message' => 'Producto actualizado correctamente',
             'data' => $product
